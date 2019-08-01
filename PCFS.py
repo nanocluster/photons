@@ -9,7 +9,7 @@ Weiwei Sun, July, 2019
 import numpy as np
 import time as timing
 import os, struct, scipy, re, glob
-import photons_v2_2 as ph
+import photons as ph
 from matplotlib import pyplot as plt
 
 
