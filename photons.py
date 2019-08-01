@@ -664,7 +664,7 @@ class photons:
     file_out: 'cross_corr' or 'auto_corr'
     channels: Hydraharp channels to be correlated. e.g. [0,1] for cross-correlation of channels 0 and 1.
     time_bounds: upper and lower limit for the correlation. In ps for T2, in pulses for T3.
-    lag_precision: Number of correlation points between time-spacings of log(2).
+    lag_precision: Number of correlation points between time-spacings of log(2). Must be integers larger than 1.
     lag_offset: offset in ps or pulses between the channels.
 
     This algorithm computes the cross-correlation between ch0 and ch1 variables.
