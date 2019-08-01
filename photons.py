@@ -31,8 +31,8 @@ class photons:
         self.header = None # dictionary for header information
         self.memory_limit = memory_limit
         self.buffer_size = int(self.memory_limit * 1024 * 1024 / 8) # how many uint64 can be read at once
-        self.cross_corr = {}
-        self.auto_corr = {} # dictionary to store the correlations
+        self.cross_corr = None
+        self.auto_corr = None # dictionary to store the correlations
 
         # extract photon stream file info
         self.path_str = os.path.split(file_path)[0]
@@ -786,9 +786,11 @@ class photons:
             lags = lags * sync_period
 
         if 'cross' in correlations:
+            self.cross_corr = {}
             self.cross_corr['lags'] = lags
             self.cross_corr['corr_norm'] = corr_norm
         elif 'auto' in correlations:
+            self.auto_corr = {}
             self.auto_corr['lags'] = lags
             self.auto_corr['corr_norm'] = corr_norm
 
