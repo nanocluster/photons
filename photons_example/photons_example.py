@@ -2,11 +2,7 @@
 Example code for PCFS data analysis.
 '''
 
-import numpy as py
-import os
-from matplotlib import pyplot as plt
 import photons as ph
-import PCFS
 
 
 file = 'ExampleT2.stream'
