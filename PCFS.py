@@ -115,7 +115,7 @@ class PCFS:
 
 
     '''
-    This function obtains the cross-correlations and the auto-correlation of the sum signal at each stage position and returns them in a matrix self.cross_corr_interferogram, where the first line is the self.stage_positions. It also returns the auto-correlation function of the sum signal to a matirx of similar structure.
+    This function obtains the cross-correlations and the auto-correlation of the sum signal at each stage position and returns them in a matrix self.cross_corr_interferogram and the auto-correlation function of the sum signal to a matirx of similar structure.
     '''
     def get_intensity_correlations(self, time_bounds, lag_precision):
         time_start= timing.time()
@@ -140,8 +140,7 @@ class PCFS:
 
                 # create an array containing to be filled up with the PCFS interferogram.
                 if cross_corr_interferogram is None:
-                    cross_corr_interferogram = np.zeros((self.length_tau+1, len(self.stage_positions)))
-                    cross_corr_interferogram[0,:] = self.stage_positions
+                    cross_corr_interferogram = np.zeros((self.length_tau, len(self.stage_positions)))
 
                 correlation_number = int(re.findall(r'\d+', f)[0]) # extract the number of correlation measurements from the file names
                 cross_corr_interferogram[1:, correlation_number] = self.photons[f].cross_corr['corr_norm']
@@ -155,8 +154,7 @@ class PCFS:
                     self.length_tau = len(self.tau)
                 # create an array containing to be filled up with the PCFS interferogram.
                 if auto_corr_sum_interferogram is None:
-                    auto_corr_sum_interferogram = np.zeros((length_tau+1, len(self.stage_positions)))
-                    auto_corr_sum_interferogram[0,:] = self.stage_positions
+                    auto_corr_sum_interferogram = np.zeros((length_tau, len(self.stage_positions)))
 
                 correlation_number = int(re.findall(r'\d+', f)[0]) # extract the number of correlation measurements from the file names
                 auto_corr_sum_interferogram[1:, correlation_number] = self.photons[f[11:]].auto_corr['corr_norm']
@@ -166,9 +164,7 @@ class PCFS:
         self.auto_corr_sum_interferogram = auto_corr_sum_interferogram.copy()
 
         # substract auto-correlation of sum signal from the cross correlation.
-        PCFS_interferogram = cross_corr_interferogram - auto_corr_sum_interferogram
-        PCFS_interferogram[0,:] = self.stage_positions
-        self.PCFS_interferogram = PCFS_interferogram.copy()
+        self.PCFS_interferogram = cross_corr_interferogram - auto_corr_sum_interferogram
 
 
         time_end= timing.time()
@@ -186,7 +182,6 @@ class PCFS:
     '''
     def get_blinking_corrected_PCFS(self):
         self.blinking_corrected_PCFS_interferogram = 1 - self.cross_corr_interferogram / self.auto_corr_sum_interferogram
-        self.blinking_corrected_PCFS_interferogram[1, :] = self.stage_positions
 
 
     '''
@@ -200,7 +195,7 @@ class PCFS:
         x = 2 * (self.stage_positions - white_fringe)
         ind = np.array([np.argmin(np.abs(self.tau - tau)) for tau in tau_select])
         legends = [tau/1e9 for tau in tau_select]
-        y = self.blinking_corrected_PCFS_interferogram[ind+1, :]
+        y = self.blinking_corrected_PCFS_interferogram[ind, :]
 
         plt.figure()
         plt.subplot(3,1,1)
@@ -258,7 +253,7 @@ class PCFS:
         for i in range(len(tau_select)):
             plt.plot(x, y[i,:]/max(y[i,:]))
 
-        plt.ylabel(r'Normalized$p(\zeta)$')
+        plt.ylabel(r'Normalized $p(\zeta)$')
         plt.xlabel(r'$\zeta$ [meV]')
         plt.xlim(xlim)
         plt.legend(legends)
