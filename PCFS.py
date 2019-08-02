@@ -143,7 +143,7 @@ class PCFS:
                     cross_corr_interferogram = np.zeros((self.length_tau, len(self.stage_positions)))
 
                 correlation_number = int(re.findall(r'\d+', f)[0]) # extract the number of correlation measurements from the file names
-                cross_corr_interferogram[1:, correlation_number] = self.photons[f].cross_corr['corr_norm']
+                cross_corr_interferogram[:, correlation_number] = self.photons[f].cross_corr['corr_norm']
 
             # looking to get suto-correlation for sum signals
             else:
@@ -154,10 +154,10 @@ class PCFS:
                     self.length_tau = len(self.tau)
                 # create an array containing to be filled up with the PCFS interferogram.
                 if auto_corr_sum_interferogram is None:
-                    auto_corr_sum_interferogram = np.zeros((length_tau, len(self.stage_positions)))
+                    auto_corr_sum_interferogram = np.zeros((self.length_tau, len(self.stage_positions)))
 
                 correlation_number = int(re.findall(r'\d+', f)[0]) # extract the number of correlation measurements from the file names
-                auto_corr_sum_interferogram[1:, correlation_number] = self.photons[f[11:]].auto_corr['corr_norm']
+                auto_corr_sum_interferogram[:, correlation_number] = self.photons[f[11:]].auto_corr['corr_norm']
             print('==============================')
 
         self.cross_corr_interferogram = cross_corr_interferogram.copy()
@@ -270,7 +270,7 @@ class PCFS:
     def get_mirror_spectral_corr(self, white_fringe_pos, white_fringe_ind):
 
         # construct mirrored data
-        interferogram = self.blinking_corrected_PCFS_interferogram[1:,:]
+        interferogram = self.blinking_corrected_PCFS_interferogram.copy()
         mirror_intf = np.hstack((np.fliplr(interferogram[:, white_fringe_ind:]), interferogram[:, white_fringe_ind+1:]))
         temp = white_fringe_pos - self.stage_positions[white_fringe_ind:]
         temp = temp[::-1]
