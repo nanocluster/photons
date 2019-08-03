@@ -661,7 +661,7 @@ class photons:
     This function allows to correlate the photon-stream on a log timescale. The photon correlation is stored as a property of the photons class: self.correlation
 
     file_in: file ID of the photons-file to correlate
-    file_out: 'cross_corr' or 'auto_corr'
+    correlations: 'cross_corr' or 'auto_corr'
     channels: Hydraharp channels to be correlated. e.g. [0,1] for cross-correlation of channels 0 and 1.
     time_bounds: upper and lower limit for the correlation. In ps for T2, in pulses for T3.
     lag_precision: Number of correlation points between time-spacings of log(2). Must be integers larger than 1.
