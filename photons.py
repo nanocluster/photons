@@ -10,6 +10,7 @@ import numpy as np
 import time as timing
 import os, struct, scipy, warnings
 from numba import jit
+from matplotlib import pyplot as plt
 warnings.filterwarnings('ignore')
 
 
@@ -661,7 +662,7 @@ class photons:
     This function allows to correlate the photon-stream on a log timescale. The photon correlation is stored as a property of the photons class: self.cross_corr or self.auto_corr.
 
     file_in: file ID of the photons-file to correlate
-    correlations: 'cross_corr' or 'auto_corr'
+    correlations: 'cross_corr' or 'auto_corr'.
     channels: Hydraharp channels to be correlated. e.g. [0,1] for cross-correlation of channels 0 and 1.
     time_bounds: upper and lower limit for the correlation. In ps for T2, in pulses for T3.
     lag_precision: Number of correlation points between time-spacings of log(2). Must be integers larger than 1.
@@ -737,7 +738,6 @@ class photons:
 
         start_time, stop_time = time_bounds
 
-
         '''create log 2 spaced lags'''
         cascade_end = int(np.log2(stop_time)) # cascades are collections of lags  with equal bin spacing 2^cascade
         nper_cascade =  lag_precision # number of equal
@@ -753,6 +753,7 @@ class photons:
         lag_bin_edges = lag_bin_edges[start_bin:stop_bin+1] # bins
         lags = lags[start_bin+1:stop_bin+1] # center of the bins
         division_factor = division_factor[start_bin+1:stop_bin+1] # normalization factor
+
 
         # counters etc for normalization
         ch0_min = np.inf
@@ -795,10 +796,68 @@ class photons:
             self.auto_corr['corr_norm'] = corr_norm
 
 
+        time_end = timing.time()
+        print('Total time elapsed is %4f s' % (time_end - time_start))
 
+
+
+    '''
+    This function calculates g2 for t3 data.
+    '''
+    def get_g2(self, file_in, channels, time_range, n_bins):
+
+        if self.header['MeasurementMode'] == 2:
+            print('Only for t3 data!')
+            return False
+
+        time_start = timing.time()
+
+        fin_file = self.path_str +file_in + '.photons'
+        fin = open(fin_file, 'rb')
+        photons_records = np.fromfile(fin, dtype=np.uint64)
+        length_photons = len(photons_records) // 3
+        photons_records.shape = length_photons, 3
+        fin.close()
+
+        # split into channels
+        pulse = 1e12 / self.header['SyncRate']
+        ch0 = photons_records[photons_records[:,0] == channels[0], 2] + photons_records[photons_records[:,0] == channels[0], 1] * pulse# ch0 time
+
+        ch1 = photons_records[photons_records[:,0] == channels[1], 2] + photons_records[photons_records[:,0] == channels[1], 1] * pulse# ch1 time
+
+        # use linear spaced bins for g2 calculation
+        bin_width = time_range // n_bins
+        lag_bin_edges = np.arange(0, time_range + 2 * bin_width, bin_width)
+        lags = np.hstack((-lag_bin_edges[-2::-1], lag_bin_edges[1:]))
+        lag_bin_edges = lags- bin_width/2
+
+
+        '''correlating '''
+        tic = timing.time()
+        print('Correlating data...\n')
+
+        corr = self.photons_in_bins(ch0, ch1, lag_bin_edges, 0)
+
+        # correct for offset
+        n_ind = pulse // bin_width
+        ind_pulse_1 = np.argmax(corr[n_bins:int(n_bins+1.5*n_ind)]) # find the index of the first pulse
+        offset = pulse - lags[ind_pulse_1+n_bins] # correct for offset
+
+        print('Done\n')
+        toc = timing.time()
+        print('Time elapsed during correlating is %4f s' % (toc-tic))
+        self.g2 = {}
+        self.g2['lags'] = (lags[:-1] + offset) / 1e3 # in ns
+        self.g2['g2'] = corr
+
+        plt.plot(self.g2['lags'], self.g2['g2'], '-o', markersize = 1)
+        plt.ylabel('Event counts')
+        plt.xlabel('Pulse separation [ns]')
+        plt.show()
 
         time_end = timing.time()
         print('Total time elapsed is %4f s' % (time_end - time_start))
+
 
 
 
