@@ -658,7 +658,7 @@ class photons:
 
     '''
     Adapted from Boris Spokoyny's code.
-    This function allows to correlate the photon-stream on a log timescale. The photon correlation is stored as a property of the photons class: self.correlation
+    This function allows to correlate the photon-stream on a log timescale. The photon correlation is stored as a property of the photons class: self.cross_corr or self.auto_corr.
 
     file_in: file ID of the photons-file to correlate
     correlations: 'cross_corr' or 'auto_corr'
