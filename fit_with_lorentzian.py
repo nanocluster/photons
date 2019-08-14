@@ -6,86 +6,6 @@ import numpy as np
 from scipy.optimize import curve_fit
 from matplotlib import pyplot as plt
 
-'''
-These functions are in the spectral domain.
-'''
-
-def fit_with_lorentzian(zeta_in, spectral_corr, params):
-    if len(params) == 4:
-        popt, pconv = curve_fit(two_lorentzian, zeta_in, spectral_corr, p0=params)
-    elif len(params) == 7:
-        popt, pconv = curve_fit(three_lorentzian, zeta_in, spectral_corr, p0=params)
-    else:
-        print('Wrong number of parameters!')
-        print('4 for two lorentzians and 7 for three lorentzians!')
-        return False
-    return popt
-
-
-
-# return the normalized spectral correlation of two lorentzians
-def two_lorentzian(zeta_in, params):
-    energy_vec = zeta_in
-
-    # two lorentzians
-    E, gamma, A, c = params
-    lineshape = 1/(energy_vec**2 + 0.25 * gamma**2) + A/((energy_vec-E)**2 + 0.25 * gamma**2)
-
-    # spectral correlation of the two lorentzians
-    spectral_corr = np.correlate(lineshape, lineshape, 'full')
-    spectral_corr = spectral_corr/max(spectral_corr) + c
-    spectral_corr = spectral_corr/max(spectral_corr)
-    return spectral_corr
-
-# return the normalized spectral correlation of three lorentzians
-def three_lorentzian(zeta_in, params):
-    energy_vec = zeta_in
-
-    # three lorentzians
-    E0, E1, gamma, A0, A1, c, d = params
-    lineshape = 1/(energy_vec**2 + 0.25 * gamma**2) + A0/((energy_vec-E0)**2 + 0.25 * gamma**2) + A1/((energy_vec-E1)**2 + 0.25 * gamma**2)
-
-    # spectral correlation of the three lorentzians
-    spectral_corr = np.correlate(lineshape, lineshape, 'full')
-    spectral_corr = spectral_corr/max(spectral_corr) + c
-    spectral_corr = d*spectral_corr/max(spectral_corr)
-    return spectral_corr
-
-
-'''
-These functions are in the time domain.
-'''
-
-def fit_with_lorentzian_FFT(path_length_difference_in, interferogram, params):
-    popt, pconv = curve_fit(lorentzian_FFT, path_length_difference_in, interferogram, p0=params)
-    return popt
-
-
-# return the Fourier transformed interferogram of the lorentzians
-def lorentzian_FFT(path_length_difference, params):
-    #some constants
-    eV2cm = 8065.54429
-    cm2eV = 1 / eV2cm
-
-    # create a zeta_eV according to the input path_length_difference
-    N =  4097 # number of grids we generate
-    delta=(max(path_length_difference) - min(path_length_difference)) / (N-1)
-    zeta_eV = np.fft.fftshift(np.fft.fftfreq(N, delta)) * cm2eV * 1000 # in meV
-
-    # the spectral correlation using the params given on the zeta_eV
-    if len(params) == 4:
-        spectral_corr = two_lorentzian(zeta_eV, params)
-    elif len(params) == 7:
-        spectral_corr = three_lorentzian(zeta_eV, params)
-    else:
-        print('Wrong number of parameters!')
-        print('4 for two lorentzians and 7 for three lorentzians!')
-    return False
-
-    # then FFT the spectral_corr to the Fourier domain
-    interferogram = np.abs(np.fft.fftshift(np.fft.ifft(spectral_corr)))
-    return interferogram
-
 
 
 '''
@@ -140,29 +60,6 @@ def do_fft(ys, dw):
 
 
 if __name__ == '__main__':
-    # ws = [0,4,6]
-    # gammas = [1,0.3,0.2]
-    # cs = [1,0.25,0.22]
-    # t = np.arange(-12,12,0.2)
-    #
-    # ks = np.arange(-10,10,0.1)
-    # dk = ks[1]-ks[0]
-    # lor_f = sum_lorentzian(ks, ws, gammas, cs)
-    # lor_f_ac = np.correlate(lor_f,lor_f,"same") * dk
-    # ts, interferogram = do_fft(lor_f_ac, dk)
-    # interferogram_fft = np.abs(interferogram)
-    #
-    # _, lor_t = do_fft(lor_f, dk)
-    # interferogram_fft2 = np.abs(lor_t)**2.
-    #
-    # sq_fft_sum = sq_fft_sum_lorentzian(t,ws,gammas,cs)
-    # plt.plot(ts, interferogram_fft, 'ro', markersize = 2)
-    # plt.plot(ts, interferogram_fft2, 'go', markersize = 2)
-    # plt.plot(t, sq_fft_sum, 'b-o', markersize = 2)
-    # plt.xlim([-10,10])
-    # plt.show()
-
-    # -----------------------------------------------------------
 
     ts, ys = np.loadtxt("Dot1_run_2_interferogram.txt")
     ind = 10
@@ -189,22 +86,4 @@ if __name__ == '__main__':
     plt.title('Dot1_run_two PCFS interferogram averaged over 50-200 ms')
     plt.show()
 
-    # -----------------------------------------------------------
-    #
-    # scales = [0.7, 1.5, 3.7]
-    # phases = [0.5, 1.7, 3.2]
-    # ts_posit = np.concatenate([np.random.exponential(scale, 10000) for scale in scales])
-    # ts_negat = np.concatenate([-np.random.exponential(scale, 10000) for scale in scales])
-    # ts = np.concatenate([ts_posit, ts_negat])
-    # hist, bin_edges = np.histogram(ts, bins=1024)
-    # # plt.semilogy(bin_edges[:-1], hist, "x")
-    # # plt.show()
-    #
-    # dbin = bin_edges[1] - bin_edges[0]
-    # fs, hist_f = do_fft(hist, dbin)
-    #
-    # df = fs[1] - fs[0]
-    # hist_f_ac = np.correlate(hist_f,hist_f,"same") * df
-    # ts2, interferogram = do_fft(hist_f_ac, df)
-    # plt.plot(ts2, np.abs(interferogram))
-    # plt.show()
+ 
