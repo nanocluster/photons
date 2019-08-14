@@ -17,3 +17,8 @@ Weiwei Sun, July, 2019
 
 ## examples
 .stream, .pcfslog, and .pos files in the example folder. PCFS_example.py for data analysis.
+
+# fit_with_lorentzian
+Fitting function to fit PCFS interferogram with several lorentzians.
+
+
