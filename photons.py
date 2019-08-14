@@ -804,7 +804,7 @@ class photons:
     '''
     This function calculates g2 for t3 data.
     file_in and channels are the same as photon_corr.
-    time_range is the maximum time we're interested in, in ps.
+    time_range is the maximum time we're interested in, in ps. If we're only interested in [-tau_rep, tau_rep], then time_range = tau_rep.
     n_bins are the number of bins for correlation. 
     '''
     def get_g2(self, file_in, channels, time_range, n_bins):
