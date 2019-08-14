@@ -119,6 +119,7 @@ class PCFS:
     '''
     def get_intensity_correlations(self, time_bounds, lag_precision):
         time_start= timing.time()
+        self.get_file_photons()
         self.time_bounds = time_bounds
         self.lag_precision = lag_precision
         cross_corr_interferogram = None
@@ -142,13 +143,13 @@ class PCFS:
                 if cross_corr_interferogram is None:
                     cross_corr_interferogram = np.zeros((self.length_tau, len(self.stage_positions)))
 
-                correlation_number = int(re.findall(r'\d+', f)[0]) # extract the number of correlation measurements from the file names
+                correlation_number = int(re.findall(r'\d+', f)[-1]) # extract the number of correlation measurements from the file names
                 cross_corr_interferogram[:, correlation_number] = self.photons[f].cross_corr['corr_norm']
 
-            # looking to get suto-correlation for sum signals
+            # looking to get auto-correlation for sum signals
             else:
-                self.photons[f[11:]].photon_corr(f, 'auto', [0,0], time_bounds, lag_precision, 0)
-
+                if self.photons[f[11:]].auto_corr is None:
+                    self.photons[f[11:]].photon_corr(f, 'auto', [0,0], time_bounds, lag_precision, 0)
                 if self.tau is None:
                     self.tau = self.photons[f[11:]].auto_corr['lags']
                     self.length_tau = len(self.tau)
@@ -156,7 +157,7 @@ class PCFS:
                 if auto_corr_sum_interferogram is None:
                     auto_corr_sum_interferogram = np.zeros((self.length_tau, len(self.stage_positions)))
 
-                correlation_number = int(re.findall(r'\d+', f)[0]) # extract the number of correlation measurements from the file names
+                correlation_number = int(re.findall(r'\d+', f)[-1]) # extract the number of correlation measurements from the file names
                 auto_corr_sum_interferogram[:, correlation_number] = self.photons[f[11:]].auto_corr['corr_norm']
             print('==============================')
 
@@ -164,7 +165,8 @@ class PCFS:
         self.auto_corr_sum_interferogram = auto_corr_sum_interferogram.copy()
 
         # substract auto-correlation of sum signal from the cross correlation.
-        self.PCFS_interferogram = cross_corr_interferogram - auto_corr_sum_interferogram
+        PCFS_interferogram = cross_corr_interferogram - auto_corr_sum_interferogram
+        self.PCFS_interferogram = PCFS_interferogram.copy()
 
 
         time_end= timing.time()
@@ -192,10 +194,11 @@ class PCFS:
             self.get_blinking_corrected_PCFS()
 
         # plot PCFS interferogram at different tau
-        x = 2 * (self.stage_positions - white_fringe)
+        x = 2 * (self.stage_positions - white_fringe) # in mm
         ind = np.array([np.argmin(np.abs(self.tau - tau)) for tau in tau_select])
         legends = [tau/1e9 for tau in tau_select]
         y = self.blinking_corrected_PCFS_interferogram[ind, :]
+        x = x/(3e8)/1000*1e12 # convert to ps
 
         plt.figure()
         plt.subplot(3,1,1)
@@ -203,7 +206,8 @@ class PCFS:
             plt.plot(x, y[i,:])
 
         plt.ylabel(r'$g^{(2)}_{cross} - g^2_{auto}$')
-        plt.xlabel('Optical Path Length Difference [mm]')
+        # plt.xlabel('Optical Path Length Difference [mm]')
+        plt.xlabel('Optical Path Length Difference [ps]')
         plt.legend(legends)
         plt.title(self.PCFS_ID + r' PCFS Interferogram at $\tau$ [ms]')
 
@@ -212,7 +216,8 @@ class PCFS:
             plt.plot(x, y[i,:]/max(y[i,:]))
 
         plt.ylabel(r'$g^{(2)}_{cross} - g^2_{auto}$')
-        plt.xlabel('Optical Path Length Difference [mm]')
+        # plt.xlabel('Optical Path Length Difference [mm]')
+        plt.xlabel('Optical Path Length Difference [ps]')
         plt.legend(legends)
         plt.title('Normalized ' + self.PCFS_ID + r' PCFS Interferogram at $\tau$ [ms]')
 
@@ -221,10 +226,11 @@ class PCFS:
             plt.plot(x, np.sqrt(y[i,:]/max(y[i,:])))
 
         plt.ylabel(r'$g^{(2)}_{cross} - g^2_{auto}$')
-        plt.xlabel('Optical Path Length Difference [mm]')
+        # plt.xlabel('Optical Path Length Difference [mm]')
+        plt.xlabel('Optical Path Length Difference [ps]')
         plt.legend(legends)
 
-        plt.title('Squared Normalized ' + self.PCFS_ID + r' PCFS Interferogram at $\tau$ [ms]')
+        plt.title('Squared root of Normalized ' + self.PCFS_ID + r' PCFS Interferogram at $\tau$ [ms]')
         plt.tight_layout()
         plt.show()
 
@@ -270,7 +276,7 @@ class PCFS:
     def get_mirror_spectral_corr(self, white_fringe_pos, white_fringe_ind):
 
         # construct mirrored data
-        interferogram = self.blinking_corrected_PCFS_interferogram.copy()
+        interferogram = self.blinking_corrected_PCFS_interferogram[:,:]
         mirror_intf = np.hstack((np.fliplr(interferogram[:, white_fringe_ind:]), interferogram[:, white_fringe_ind+1:]))
         temp = white_fringe_pos - self.stage_positions[white_fringe_ind:]
         temp = temp[::-1]
@@ -284,7 +290,7 @@ class PCFS:
             interp_mirror[i,:] = np.interp(interp_stage_pos, mirror_stage_pos, mirror_intf[i,:])
 
         self.mirror_stage_pos = mirror_stage_pos
-        self.mirror_PCFS_interferogram = interp_mirror
+        self.mirror_PCFS_interferogram = interp_mirror # not including the first line of position
 
         #some constants
         eV2cm = 8065.54429
@@ -292,16 +298,17 @@ class PCFS:
 
         N = len(interp_stage_pos)
         path_length_difference = 0.2 * (interp_stage_pos) # NOTE: This is where we convert to path length difference space in cm.
-        delta=(max(path_length_difference) - min(path_length_difference)) / N
+        delta = (max(path_length_difference) - min(path_length_difference)) / (N-1)
+        zeta_eV = np.fft.fftshift(np.fft.fftfreq(N, delta)) * cm2eV * 1000 # in meV
 
         # get reciprocal space (wavenumbers).
-        increment = 1 / delta
-        zeta_eV = np.linspace(-0.5 * increment, 0.5 * increment, num = N) * cm2eV * 1000 # converted to meV
+        # increment = 1 / delta
+        # zeta_eV = np.linspace(-0.5 * increment, 0.5 * increment, num = N) * cm2eV * 1000 # converted to meV
 
         # take the FFT of the interferogram to get the spectral correlation. All that shifting is to shift the zero frequency component to the middle of the FFT vector. We take the real part of the FFT because the interferogram is by definition entirely symmetric.
         spectral_correlation = self.mirror_PCFS_interferogram.copy()
         for i in range(a):
-            spectral_correlation[i,:] = np.real(np.fft.fftshift(np.fft.fft(np.fft.ifftshift(self.mirror_PCFS_interferogram[i,:]), N)))
+            spectral_correlation[i,:] = np.abs(np.fft.fftshift(np.fft.fft(self.mirror_PCFS_interferogram[i,:])))
 
         self.mirror_spectral_correlation = {}
         self.mirror_spectral_correlation['spectral_corr'] = spectral_correlation
@@ -325,25 +332,25 @@ class PCFS:
 
         N = len(stage_positions)
         path_length_difference = 2 * (stage_positions - white_fringe_pos) * 0.1 # NOTE: This is where we convert to path length difference space in cm.
-        delta=(max(path_length_difference) - min(path_length_difference)) / N
+        delta = (max(path_length_difference) - min(path_length_difference)) / (N-1)
+        zeta_eV = np.fft.fftshift(np.fft.fftfreq(N, delta)) * cm2eV * 1000 # in meV
 
         # get reciprocal space (wavenumbers).
-        increment = 1 / delta
-        zeta_eV = np.linspace(-0.5 * increment, 0.5 * increment, num = N) * cm2eV * 1000 # converted to meV
+        # increment = 1 / delta
+        # zeta_eV = np.linspace(-0.5 * increment, 0.5 * increment, num = N) * cm2eV * 1000 # converted to meV
 
         # take the FFT of the interferogram to get the spectral correlation. All that shifting is to shift the zero frequency component to the middle of the FFT vector. We take the real part of the FFT because the interferogram is by definition entirely symmetric.
-        normalized_spectral_correlatoin = np.real(np.fft.fftshift(np.fft.fft(np.fft.ifftshift(interferogram), N)))
+        spectral_correlation = np.abs(np.fft.fftshift(np.fft.fft(interferogram)))
 
-        normalized_spectral_correlatoin = normalized_spectral_correlatoin / max(normalized_spectral_correlatoin)
+        normalized_spectral_correlatoin = spectral_correlation / max(spectral_correlation)
 
 
-        plt.figure()
-        plt.plot(zeta_eV, normalized_spectral_correlatoin)
+        plt.plot(zeta_eV, normalized_spectral_correlatoin, '-o', markersize = 1)
 
         plt.ylabel(r'Normalized $p(\zeta)$')
         plt.xlabel(r'$\zeta$ [meV]')
 
-        plt.title(self.PCFS_ID + r' Spectral Correlation at $$\tau [ms]')
+        plt.title(self.PCFS_ID + r' Spectral Correlation at $\tau$ [ms]')
         plt.show()
 
 
