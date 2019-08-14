@@ -234,9 +234,16 @@ class PCFS:
         plt.tight_layout()
         plt.show()
 
-
+        
+        
     '''
-    This function gets spectral correlation data.
+    ==========================================================================================
+    Depreciated
+    '''
+
+    
+    '''
+    This function gets spectral correlation data. Depreciated.
     '''
     def plot_mirror_spectral_corr(self, tau_select, xlim):
         x = self.mirror_spectral_correlation['zeta']
@@ -271,7 +278,7 @@ class PCFS:
 
 
     '''
-    This function gets mirrored spectral coreelation by interpolation.
+    This function gets mirrored spectral correlation by interpolation. Depreciated.
     '''
     def get_mirror_spectral_corr(self, white_fringe_pos, white_fringe_ind):
 
@@ -316,10 +323,6 @@ class PCFS:
 
 
 
-    '''
-    ==========================================================================================
-    Others
-    '''
 
     '''
     This function calculates and plots the spectral correlation of an interterferogram parsed as two vectors containing the stage_positions (not path length differences!), the corresponding interferogram values and the white-fringe position.
