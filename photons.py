@@ -173,11 +173,8 @@ class photons:
         print('BaseResolution: %f\n'  % BaseResolution)
 
 
-        # temp = str(fid.read(8).decode('ascii')).strip('\x00')
-        # InputsEnabled = str(hex(ord(temp)))[2:]
         InputsEnabled = struct.unpack('Q', fid.read(8))[0] # uint64
         print('Inputs Enabled: %d\n' % InputsEnabled)
-        # print('Inputs Enabled: %s\n' % InputsEnabled)
 
         InpChansPresent  = struct.unpack('i',fid.read(4))[0]
         print('Input Chan. Present: %d\n' % InpChansPresent)
