@@ -201,7 +201,7 @@ class photons:
         print('Sync CFD ZeroCross: %d mV\n' % SyncCFDZeroCross)
 
         SyncOffset = struct.unpack('i',fid.read(4))[0]
-        print(' Sync Offset: %d\n' % SyncOffset)
+        print('Sync Offset: %d\n' % SyncOffset)
 
 
 
