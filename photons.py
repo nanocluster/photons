@@ -133,9 +133,9 @@ class photons:
             DispCurveShow.append(struct.unpack('i',fid.read(4))[0])
 
         for i in range(3):
-            ParamStart.append(struct.unpack('i',fid.read(4))[0])
-            ParamStep.append(struct.unpack('i',fid.read(4))[0])
-            ParamEnd.append(struct.unpack('i',fid.read(4))[0])
+            ParamStart.append(struct.unpack('f',fid.read(4))[0])
+            ParamStep.append(struct.unpack('f',fid.read(4))[0])
+            ParamEnd.append(struct.unpack('f',fid.read(4))[0])
 
         RepeatMode = struct.unpack('i',fid.read(4))[0]
         RepeatsPerCurve = struct.unpack('i',fid.read(4))[0]
@@ -804,8 +804,8 @@ class photons:
     '''
     This function calculates g2 for t3 data.
     file_in and channels are the same as photon_corr.
-    time_range is the maximum time we're interested in, in ps. If we're only interested in [-tau_rep, tau_rep], then time_range = tau_rep.
-    n_bins are the number of bins for correlation. 
+    time_range is the maximum time we're interested in, in ps.
+    n_bins are the number of bins for correlation.
     '''
     def get_g2(self, file_in, channels, time_range, n_bins):
 
@@ -860,7 +860,6 @@ class photons:
 
         time_end = timing.time()
         print('Total time elapsed is %4f s' % (time_end - time_start))
-
 
 
 
