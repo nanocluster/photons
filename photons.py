@@ -1,5 +1,5 @@
 '''
-Python for analysis of photon stream data from the Picoqunt GmbH Hydraharp.
+Python for analysis of photon stream data from the Picoqunt GmbH Hydraharp and the Swabian TimeTagger.
 
 Adapted from photons.m V5.0 @ HENDRIK UTZAT, KATIE SHULENBERGER, BORIS SPOKOYNY, TIMOTHY SINCLAIR (10/29/2017)
 
@@ -15,7 +15,9 @@ warnings.filterwarnings('ignore')
 
 
 '''
-After reading the metadata with the constructor methods (.photons), the function get_photon_records() parses the raw hoton-arrival time data recorded with an absolute experimental clock (T2 data, .ht2) or a relative experimental clock (T3 data, .ht3) into the true photon-arrival time records. These photon-records are written to a .photons file in uint64 representation.
+For HH data, after reading the metadata with the constructor methods (.photons), the function get_photon_records() parses the raw hoton-arrival time data recorded with an absolute experimental clock (T2 data, .ht2) or a relative experimental clock (T3 data, .ht3) into the true photon-arrival time records. These photon-records are written to a .photons file in uint64 representation.
+
+For Swabian data (t3 mode), there's already a .photons file in int64 and a .ht3 file with header info.
 '''
 class photons:
 
@@ -23,8 +25,11 @@ class photons:
     Called when creating photon class. It reads the header from the input photon stream file.
     file_path is the path to the photon stream file. NOTE: '\' needs to be replaced to '\\' or '/'.
     memory_limit is the maximum memory to read metadata at once, set to default 1 MB.
+
+    For HH data, skipheader is set to default as 0.
+    For Swabian data, file_path is the .ht3 file, skipheader = 1.
     """
-    def __init__(self, file_path, memory_limit = 1):
+    def __init__(self, file_path, skipheader = 0, memory_limit = 1):
 
         # properties
         self.file_path = file_path
@@ -41,7 +46,12 @@ class photons:
         self.file_ext = os.path.split(file_path)[1].split('.')[1]
 
         # read the photon stream file header info
-        self.get_photon_stream_header()
+        if not skipheader:
+            self.get_photon_stream_header()
+            self.datatype = np.uint64
+        else:
+            self.get_ht3_header()
+            self.datatype = np.int64
 
         print('========================================')
         print('Photon class created')
@@ -318,6 +328,35 @@ class photons:
 
 
     '''
+    This function reads the header info (Comment, AcqTime, SyncRate, and nRecords) from Swabian ht3 file.
+    '''
+    def get_ht3_header(self):
+        header = {}
+        with open(self.file_path,'rb') as f:
+            temp = f.read(72)
+            temp = f.read(256)
+            if temp[:4] == b'none':
+                header['Comment'] = 'none'
+            else:
+                header['Comment'] = temp
+            print('Comment: %s\n'  % (header['Comment']))
+            temp = f.read(36)
+            header['AcqTime'] = struct.unpack('i',f.read(4))[0]
+            temp = f.read(488)
+            header['SyncRate'] = struct.unpack('i',f.read(4))[0]
+            print('Sync Rate: %d Hz\n' % header['SyncRate'])
+            temp = f.read(12)
+            header['nRecords'] = struct.unpack('Q',f.read(8))[0]
+            print('Number of Records: %d\n' % header['nRecords'])
+            header['MeasurementMode'] = 3
+            header['Resolution'] = 34 # in ps
+            print('Resolution: %d ps\n' % header['Resolution'])
+        self.header = header
+
+
+
+
+    '''
     This function reads the photon stream and return to the true photon records to a binary .photons file.
         t3: [channel, n_sync, dtime]
         t2: [channel, dtime]
@@ -383,10 +422,10 @@ class photons:
                 records[:,1] = n_sync[ind_rec].copy()  # adding overflow from previous batch, but not counting overflow for this batch
                 n_sync[ind_rec & ind_n_sync_0] = 1 # for correction
                 n_sync[ind_rec] = 0
-                over_flow_correction = t3_wrap_around * np.cumsum(n_sync, dtype = np.uint64) + over_flow_correction_last_batch # oveflow correction from this batch starting from batch[0] + over_flow_correction from the last batch
+                over_flow_correction = t3_wrap_around * np.cumsum(n_sync, dtype = self.datatype) + over_flow_correction_last_batch # oveflow correction from this batch starting from batch[0] + over_flow_correction from the last batch
                 records[:,1] += over_flow_correction[ind_rec] # true n_sync
                 over_flow_correction_last_batch = over_flow_correction[-1] # record the last over_flow_correction to add onto the fist of next batch
-                records.astype(np.uint64).tofile(fout) # write to the output file
+                records.astype(self.datatype).tofile(fout) # write to the output file
 
                 if lbatch < self.buffer_size:
                     break
@@ -423,12 +462,12 @@ class photons:
                 records[:,1] = dtime[ind_rec].copy() # for correction
                 dtime[ind_rec] = 0
                 dtime[ind_channel_63 * ind_dtime_0] = 1
-                over_flow_correction = t2_wrap_around * np.cumsum(dtime, dtype = np.uint64) + over_flow_correction_last_batch # oveflow correction from this batch starting from batch[0] + over_flow_correction from the last batch
+                over_flow_correction = t2_wrap_around * np.cumsum(dtime, dtype = self.datatype) + over_flow_correction_last_batch # oveflow correction from this batch starting from batch[0] + over_flow_correction from the last batch
                 over_flow_correction_last_batch = over_flow_correction[-1] # record the last over_flow_correction to add onto the fist of next batch
                 records[:, 1] += over_flow_correction[ind_rec] # true time
 
 
-                records.astype(np.uint64).tofile(fout) # write to the output file
+                records.astype(self.datatype).tofile(fout) # write to the output file
 
                 if lbatch < self.buffer_size:
                     break
@@ -465,7 +504,7 @@ class photons:
         fin = open(fin_file, 'rb')
 
         while 1:
-           batch = np.fromfile(fin, dtype=np.uint64, count = counts)
+           batch = np.fromfile(fin, dtype=self.datatype, count = counts)
            batch[::self.header['MeasurementMode']] = 0 # set the channel number to be 0
            batch.tofile(fout)
 
@@ -500,7 +539,7 @@ class photons:
         fout = [open(file, 'wb') for file in fout_file]
 
         while 1:
-            batch = np.fromfile(fin, dtype=np.uint64, count = counts)
+            batch = np.fromfile(fin, dtype=self.datatype, count = counts)
             lbatch = len(batch)//self.header['MeasurementMode']
             batch.shape = lbatch, self.header['MeasurementMode']
             for i in range(n_channel):
@@ -534,7 +573,7 @@ class photons:
         fout = open(fout_file, 'wb')
 
         while 1:
-            batch = np.fromfile(fin, dtype=np.uint64, count = counts)
+            batch = np.fromfile(fin, dtype=self.datatype, count = counts)
             lbatch = len(batch)//self.header['MeasurementMode']
             batch.shape = lbatch, self.header['MeasurementMode']
             ind_lower = batch[:, -1] > tau_window[0]
@@ -572,7 +611,7 @@ class photons:
 
         fin_file = self.path_str +file_in + '.photons'
         fin = open(fin_file, 'rb')
-        photons_records = np.fromfile(fin, dtype=np.uint64)
+        photons_records = np.fromfile(fin, dtype=self.datatype)
         fin.close()
 
         self.intensity_counts = {}
@@ -616,11 +655,11 @@ class photons:
         time_start = timing.time()
         self.histo_lifetime = {}
 
-        fin_file = self.path_str +file_in + '.photons'
+        fin_file = self.path_str + file_in + '.photons'
         fin = open(fin_file, 'rb')
 
         # initializations
-        # rep_time = 1e12/self.header['SyncRate'] # in ps
+        rep_time = 1e12/self.header['SyncRate'] # in ps
         n_bins = int(rep_time//resolution)
         bins = np.arange(0.5, n_bins+1.5) * resolution
         time = np.arange(1,n_bins+1) * resolution
@@ -628,14 +667,14 @@ class photons:
 
         counts = self.buffer_size * self.header['MeasurementMode']
         while 1:
-            batch = np.fromfile(fin, dtype=np.uint64, count = counts)
+            batch = np.fromfile(fin, dtype=self.datatype, count = counts)
             histo = np.histogram(batch[2::3], bins = bins)
             hist_counts +=  histo[0]
 
             if len(batch) < counts:
                 break
         # This could be used to test whether we need batch operations
-        # photons_records = np.fromfile(fin, dtype = np.uint64)
+        # photons_records = np.fromfile(fin, dtype = self.datatype)
         # hist_counts = np.histogram(photons_records[2::3], bins = bins)[0]
 
         fin.close()
@@ -643,6 +682,12 @@ class photons:
         self.histo_lifetime['Time'] = time
         self.histo_lifetime['Lifetime'] = hist_counts
         self.histo_lifetime['Resolution'] = resolution
+
+        plt.plot(time/1000, hist_counts)
+        plt.xlabel('Time [ns]')
+        plt.ylabel('Counts')
+        plt.title('Lifetime histogram with resolution ' + str(resolution) + ' ps')
+        plt.show()
 
         time_end = timing.time()
         total_time = time_end - time_start
@@ -726,7 +771,7 @@ class photons:
 
         fin_file = self.path_str +file_in + '.photons'
         fin = open(fin_file, 'rb')
-        photons_records = np.fromfile(fin, dtype=np.uint64)
+        photons_records = np.fromfile(fin, dtype=self.datatype)
         length_photons = len(photons_records) // self.header['MeasurementMode']
         photons_records.shape = length_photons, self.header['MeasurementMode']
         fin.close()
@@ -816,7 +861,7 @@ class photons:
 
         fin_file = self.path_str +file_in + '.photons'
         fin = open(fin_file, 'rb')
-        photons_records = np.fromfile(fin, dtype=np.uint64)
+        photons_records = np.fromfile(fin, dtype=self.datatype)
         length_photons = len(photons_records) // 3
         photons_records.shape = length_photons, 3
         fin.close()
@@ -888,7 +933,7 @@ class photons:
         temp1 = np.array([-3,-2,-1]) # Assuming there are no more than three afterpulse photons
         temp2 = [-1]*3
         while 1:
-            batch = np.fromfile(fin, dtype=np.uint64, count = counts)
+            batch = np.fromfile(fin, dtype=self.datatype, count = counts)
             lbatch = len(batch)//3
             batch.shape = lbatch, 3
             channel_col = batch[:,0].copy()
