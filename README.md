@@ -1,5 +1,5 @@
 # photons
-photons class for analysis of photon stream data from the Picoqunt GmbH Hydraharp.
+photons class for analysis of photon stream data from the Picoqunt GmbH Hydraharp and the Swabian TimeTagger.
 
 Adapted from photons.m v5.0 @ HENDRIK UTZAT, KATIE SHULENBERGER, BORIS SPOKOYNY, TIMOTHY SINCLAIR (10/29/2017)
 
