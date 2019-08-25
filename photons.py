@@ -27,7 +27,7 @@ class photons:
     memory_limit is the maximum memory to read metadata at once, set to default 1 MB.
 
     For HH data, skipheader is set to default as 0.
-    For Swabian data, file_path is the .ht3 file, skipheader = 1.
+    For Swabian data, file_path is the .header file, skipheader = 1.
     """
     def __init__(self, file_path, skipheader = 0, memory_limit = 1):
 
@@ -50,7 +50,7 @@ class photons:
             self.get_photon_stream_header()
             self.datatype = np.uint64
         else:
-            self.get_ht3_header()
+            self.get_header_header()
             self.datatype = np.int64
 
         print('========================================')
@@ -330,27 +330,22 @@ class photons:
     '''
     This function reads the header info (Comment, AcqTime, SyncRate, and nRecords) from Swabian ht3 file.
     '''
-    def get_ht3_header(self):
+    def get_header_header(self):
         header = {}
-        with open(self.file_path,'rb') as f:
-            temp = f.read(72)
-            temp = f.read(256)
-            if temp[:4] == b'none':
-                header['Comment'] = 'none'
-            else:
-                header['Comment'] = temp
-            print('Comment: %s\n'  % (header['Comment']))
-            temp = f.read(36)
-            header['AcqTime'] = struct.unpack('i',f.read(4))[0]
-            temp = f.read(488)
-            header['SyncRate'] = struct.unpack('i',f.read(4))[0]
-            print('Sync Rate: %d Hz\n' % header['SyncRate'])
-            temp = f.read(12)
-            header['nRecords'] = struct.unpack('Q',f.read(8))[0]
-            print('Number of Records: %d\n' % header['nRecords'])
-            header['MeasurementMode'] = 3
-            header['Resolution'] = 34 # in ps
-            print('Resolution: %d ps\n' % header['Resolution'])
+        with open(self.file_path) as f:
+            data = f.read()
+        data = data.split()
+        header['Comment'] = data[0]
+        print('Comment: %s\n'  % (header['Comment']))
+        header['AcqTime'] = int(data[1])
+        print('Acquisition Time: %d s\n' % header['AcqTime'])
+        header['SyncRate'] = int(data[2])
+        print('Sync Rate: %d Hz\n' % header['SyncRate'])
+        header['nRecords'] = np.int64(data[3])
+        print('Number of Records: %d\n' % header['nRecords'])
+        header['MeasurementMode'] = 3
+        header['Resolution'] = 34 # in ps
+        print('Resolution: %d ps\n' % header['Resolution'])
         self.header = header
 
 
@@ -679,11 +674,14 @@ class photons:
 
         fin.close()
 
+        if self.datatype == np.int64:
+            time = rep_time - time
+
         self.histo_lifetime['Time'] = time
         self.histo_lifetime['Lifetime'] = hist_counts
         self.histo_lifetime['Resolution'] = resolution
 
-        plt.plot(time/1000, hist_counts)
+        plt.semilogy(time/1000, hist_counts)
         plt.xlabel('Time [ns]')
         plt.ylabel('Counts')
         plt.title('Lifetime histogram with resolution ' + str(resolution) + ' ps')
@@ -912,6 +910,36 @@ class photons:
     ============================================================================================
     Unfrequenly used functions
     '''
+
+
+    '''
+    This function reads the header info (Comment, AcqTime, SyncRate, and nRecords) from Swabian ht3 file. Depreciated
+    '''
+    def get_ht3_header(self):
+        header = {}
+        with open(self.file_path,'rb') as f:
+            temp = f.read(72)
+            temp = f.read(256)
+            if temp[:4] == b'none':
+                header['Comment'] = 'none'
+            else:
+                header['Comment'] = temp
+            print('Comment: %s\n'  % (header['Comment']))
+            temp = f.read(36)
+            header['AcqTime'] = struct.unpack('i',f.read(4))[0]
+            print('Acquisition Time: %d s\n' % header['AcqTime'])
+            temp = f.read(488)
+            # temp = f.read(528)
+            header['SyncRate'] = struct.unpack('i',f.read(4))[0]
+            print('Sync Rate: %d Hz\n' % header['SyncRate'])
+            temp = f.read(12)
+            header['nRecords'] = struct.unpack('Q',f.read(8))[0]
+            print('Number of Records: %d\n' % header['nRecords'])
+            header['MeasurementMode'] = 3
+            header['Resolution'] = 34 # in ps
+            print('Resolution: %d ps\n' % header['Resolution'])
+        self.header = header
+
 
 
     '''

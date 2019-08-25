@@ -50,24 +50,39 @@ def get_lifetime(data, bin_width, time_range):
 
 
 if __name__ == '__main__':
-    folder_path = 'E:\Dropbox (MIT)\codes\PCFS_python\swabian_test'
+    folder_path = 'C:\\Users\\bischof-lab\\Documents\\Weiwei\\190821_swabian_test'
     os.chdir(folder_path)
-    files =  [f.rstrip('.photons') for f in glob.glob('*.photons')]
-    resolution = 34 * 1000 # in ps, must be a multiple of 34
-    hist = []
-
-    for f in files:
-        temp = ph.photons(f+'.ht3', 1)
-        temp.get_lifetime_histogram(f, resolution)
-        hist.append([temp.histo_lifetime['Time'], temp.histo_lifetime['Lifetime']])
-
-    for f in hist:
-        plt.plot(f[0]/1000, f[1])
-    plt.xlabel('Time [ns]')
-    plt.ylabel('Counts')
-    plt.title('Lifetime histogram with resolution ' + str(resolution) + ' ps')
-    plt.legend(files)
-    plt.show()
+    file = '4.header'
+    # header = {}
+    # with open(file) as f:
+    #     data = f.read()
+    # print(data)
+    # data = data.split()
+    # header['Comment'] = data[0]
+    # header['AcqTime'] = int(data[1])
+    # header['SyncRate'] = int(data[2])
+    # header['nRecords'] = np.int64(data[3])
+    # print(header)
+    # header = get_header('3.ht3')
+    # print(header)
+    temp = ph.photons(file, 1)
+    temp.get_lifetime_histogram('4', 340)
+    # files =  [f.rstrip('.photons') for f in glob.glob('*.photons')]
+    # resolution = 34 * 10 # in ps, must be a multiple of 34
+    # hist = []
+    #
+    # for f in files:
+    #     temp = ph.photons(f+'.ht3', 1)
+    #     temp.get_lifetime_histogram(f, resolution)
+    #     hist.append([temp.histo_lifetime['Time'], temp.histo_lifetime['Lifetime']])
+    #
+    # for f in hist:
+    #     plt.plot(f[0]/1000, f[1])
+    # plt.xlabel('Time [ns]')
+    # plt.ylabel('Counts')
+    # plt.title('Lifetime histogram with resolution ' + str(resolution) + ' ps')
+    # plt.legend(files)
+    # plt.show()
 
 
 
