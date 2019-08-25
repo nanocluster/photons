@@ -50,7 +50,7 @@ class photons:
             self.get_photon_stream_header()
             self.datatype = np.uint64
         else:
-            self.get_header_header()
+            self.get_swabian_header()
             self.datatype = np.int64
 
         print('========================================')
@@ -330,14 +330,14 @@ class photons:
     '''
     This function reads the header info (Comment, AcqTime, SyncRate, and nRecords) from Swabian ht3 file.
     '''
-    def get_header_header(self):
+    def get_swabian_header(self):
         with open(self.file_path) as f:
                     data = f.read()
         data = data.split()
         header = {}
         for d in data:
             temp = d.split(':')
-            header[temp[0].strip(':')] = temp[1]
+            header[temp[0]] = temp[1]
         print('Comment: %s\n'  % (header['Comment']))
         header['AcqTime'] = int(header['AcqTime'])
         print('Acquisition Time: %d s\n' % header['AcqTime'])
