@@ -29,7 +29,7 @@ class photons:
     For HH data, skipheader is set to default as 0.
     For Swabian data, file_path is the .header file, skipheader = 1.
     """
-    def __init__(self, file_path, skipheader = 0, memory_limit = 1):
+    def __init__(self, file_path, memory_limit = 1, skipheader = 0,):
 
         # properties
         self.file_path = file_path

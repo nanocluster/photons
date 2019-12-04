@@ -11,6 +11,7 @@ import time as timing
 import os, struct, scipy, re, glob
 import photons as ph
 from matplotlib import pyplot as plt
+from scipy.optimize import curve_fit
 
 
 class PCFS:
@@ -109,7 +110,8 @@ class PCFS:
         time_start = timing.time()
         self.get_file_photons()
         for f in self.file_photons:
-            if 'sum' not in f:
+
+            if 'sum' not in f and ('sum_signal_' + f) not in self.file_photons :
                 self.photons[f].write_photons_to_one_channel(f, 'sum_signal_'+f)
         time_end= timing.time()
         print('Total time elapsed is %4f s' % (time_end - time_start))
@@ -199,7 +201,7 @@ class PCFS:
         # plot PCFS interferogram at different tau
         x = 2 * (self.stage_positions - white_fringe) # in mm
         ind = np.array([np.argmin(np.abs(self.tau - tau)) for tau in tau_select])
-        legends = [tau/1e9 for tau in tau_select]
+        legends = [tau/1e6 for tau in tau_select] # in us
         y = self.blinking_corrected_PCFS_interferogram[ind, :]
         x = x/(3e8)/1000*1e12 # convert to ps
 
@@ -208,99 +210,52 @@ class PCFS:
         for i in range(len(tau_select)):
             plt.plot(x, y[i,:])
 
-        plt.ylabel(r'$g^{(2)}_{cross} - g^2_{auto}$')
+        plt.ylabel(r'$g^{(2)}_{cross} - g^{(2)}_{auto}$')
         # plt.xlabel('Optical Path Length Difference [mm]')
         plt.xlabel('Optical Path Length Difference [ps]')
         plt.legend(legends)
-        plt.title(self.PCFS_ID + r' PCFS Interferogram at $\tau$ [ms]')
+        plt.title(self.PCFS_ID + r' PCFS Interferogram at $\tau$ [us]')
 
         plt.subplot(3,1,2)
         for i in range(len(tau_select)):
             plt.plot(x, y[i,:]/max(y[i,:]))
 
-        plt.ylabel(r'$g^{(2)}_{cross} - g^2_{auto}$')
+        plt.ylabel(r'$g^{(2)}_{cross} - g^{(2)}_{auto}$')
         # plt.xlabel('Optical Path Length Difference [mm]')
         plt.xlabel('Optical Path Length Difference [ps]')
         plt.legend(legends)
-        plt.title('Normalized ' + self.PCFS_ID + r' PCFS Interferogram at $\tau$ [ms]')
+        plt.title('Normalized ' + self.PCFS_ID + r' PCFS Interferogram at $\tau$ [us]')
 
         plt.subplot(3,1,3)
         for i in range(len(tau_select)):
             plt.plot(x, np.sqrt(y[i,:]/max(y[i,:])))
 
-        plt.ylabel(r'$g^{(2)}_{cross} - g^2_{auto}$')
+        plt.ylabel(r'$g^{(2)}_{cross} - g^{(2)}_{auto}$')
         # plt.xlabel('Optical Path Length Difference [mm]')
         plt.xlabel('Optical Path Length Difference [ps]')
         plt.legend(legends)
 
-        plt.title('Squared root of Normalized ' + self.PCFS_ID + r' PCFS Interferogram at $\tau$ [ms]')
+        plt.title('Squared root of Normalized ' + self.PCFS_ID + r' PCFS Interferogram at $\tau$ [us]')
         plt.tight_layout()
         plt.show()
 
 
-
     '''
-    This function separates the PCFS interferogram into single-particle and ensemble contribution. It separates the degree of anti-correlation at each stage position into the single molecule and ensemble contribution, and creates an array that contains the anti-correlation due to the emission coherence.
-
-    tau_plateau forms the lower and upper bounds if tau values (pulses or ps) in [a,b], which is used to calculate the ensemble interferogram.
-    tau_single marks the high simple molecule contrast in the spectral correlation in [a,b], which is used to average the single molecule component.
-    tau_limits and stage_limits to define the limits for parsing the interferogram. Data outside these limits will be discarded for further analysis.
-
-    The ensemble contribution is taken to be the plateau-value at times<dwell time of the emitter.
-    g(cross, single, tau, delta) = (g(cross, delta) - g(cross, ensemble, tau->inf, delta))/(g(auto, tau, delta) - 1)
+    This function fits the autocorrelation of the sum of the interferogram and fits to the FCS traces, and creates an array with the fitted curves, parameters, and residuals.
     '''
-    def get_SPCFS_contributions(self, tau_plateau, tau_single, tau_limits, stage_limits):
+    def fit_FCS_traces(self, interferogram, tau):
+        f = lambda x, *p: p[0] + p[3] /(1 + x / p[1]) / np.sqrt(1 + x / p[1] / p[2] / p[2])
+        tau_end = np.where(interferogram[:, i] == 0)[0][0]
+        tau_select = tau[:tau_end]
+        auto_corr = interferogram[:tau_end, i]
+        p0 = [min(auto_corr), 3e9, 1, max(auto_corr)]
+        p = curve_fit(f, tau_select, auto_corr, p0)
+        p_fit = p[0]
+        fit_curve = f(tau_select, p_fit)
+        residuals = np.sum((auto_corr - fit_curve)**2)
+        return p_fit, fit_curve, residuals
 
-        # gets ensemble g(cross) at late tau from the input
-        index_ensemble = [np.argmin(np.abs(self.tau - tau)) for tau in tau_plateau]
 
-        # creates an ensemble contribution array of the interferogram
-        length_pos = length(self.stage_positions)
-        length_tau = length(self.tau)
-        g_ensemble_average = np.mean(self.PCFS_interferogram(index_ensemble[0]:index_ensemble[1]+1, :), axis = 0)
-        g_ensemble = np.tile(np.ones(length_pos) * g_ensemble_average, (length_tau, 1))
-
-        # creates a single emitter contribution to the interferogram, i.e., subtracting the ensemble contribution from the PCFS
-        g_single = self.PCFS_interferogram - g_ensemble
-
-        # normalizes and averages selected single molecule and ensemble contributions
-        index_single = [np.argmin(np.abs(self.tau - tau)) for tau in tau_single]
-        g_single_norm = g_single / np.min(g_single, axis = 0)
-        self.g_ensemble_norm = g_ensemble / np.min(g_ensemble, axis = 0)
-        g_single_norm_sum_tau = np.sum(g_single_norm[index_single[0]:index_single[1]+1, :], axis = 0)
-        self.g_single_avg = g_single_norm_sum_tau / max(g_single_norm_sum_tau)
-
-        # gets the part of the interferogram selected by tau_limits and stage_limits
-        index_tau = [np.argmin(np.abs(self.tau - tau)) for tau in tau_limits]
-        index_stage = [np.argmin(np.abs(self.stage_positions - pos)) for pos in stage_limits]
-        g_single_select = g_single[index_tau[0]:index_tau[1]+1, index_stage[0]:index_stage[1]+1]
-        self.tau_select = self.tau[index_tau[0]:index_tau[1]+1]
-        self.stage_positions_select = self.stage_positions[index_stage[0]:index_stage[1]+1]
-
-        # normalizes the selected part of the single emitter interferogram
-        self.g_single_select_norm = g_single_select / np.min(g_single_select, axis = 1)
-
-        self.g_single = g_single
-        self.g_ensemble = g_ensemble
-        self.g_single_norm = g_single_norm
-
-        # plot the averaged single and ensemble contributions as a function of stage position
-        plt.figure()
-        plt.plot(self.stage_positions, self.g_single_avg)
-        plt.plot(self.stage_positions, self.g_ensemble_norm)
-        plt.title(self.PCFS_ID + ' Normalized PCFS Interferogram of Single Emitter and Ensemble')
-        plt.legend('Single', 'Ensemble')
-        plt.xlabel('Stage position [mm]')
-        plt.ylabel(r'Normalized $g^{(2)}_{cross} - g^{(2)}_{auto}$')
-        plt.show()
-
-        # plot a heat map of the selected normalized single emitter interferogram
-        plt.figure()
-        plt.countourf(self.stage_positions_select, self.tau_select, self.g_single_select_norm, 20)
-        plt.title(self.PCFS_ID + ' Single Emitter PCFS Interferogram')
-        plt.xlabel('Stage position [mm]')
-        plt.ylabel(r'$\tau$ [ps]')
-        plt.show()
 
 
     '''
@@ -345,7 +300,7 @@ class PCFS:
 
 
     '''
-    This function gets mirrored spectral coreelation by interpolation.
+    This function gets mirrored spectral correlation by interpolation.
     '''
     def get_mirror_spectral_corr(self, white_fringe_pos, white_fringe_ind):
 
@@ -354,8 +309,8 @@ class PCFS:
         mirror_intf = np.hstack((np.fliplr(interferogram[:, white_fringe_ind:]), interferogram[:, white_fringe_ind+1:]))
         temp = white_fringe_pos - self.stage_positions[white_fringe_ind:]
         temp = temp[::-1]
-        mirror_stage_positions = np.hstack((temp, self.stage_positions[white_fringe_ind+1:] - white_fringe_pos))
-        interp_stage_positions = np.arange(min(mirror_stage_pos), max(mirror_stage_pos)+0.01, 0.01 )
+        mirror_stage_pos = np.hstack((temp, self.stage_positions[white_fringe_ind+1:] - white_fringe_pos))
+        interp_stage_pos = np.arange(min(mirror_stage_pos), max(mirror_stage_pos)+0.01, 0.01 )
 
         # row-wise interpolation
         a,b = mirror_intf.shape
