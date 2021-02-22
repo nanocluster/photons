@@ -18,8 +18,3 @@ Weiwei Sun, July, 2019
 ## examples
 .stream, .pcfslog, and .pos files in the example folder. PCFS_example.py for data analysis.
 
-
-# swabian_lifetime
-Plots the lifetime histogram of data from the swabian unit.
-
-
