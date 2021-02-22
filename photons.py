@@ -1,9 +1,12 @@
 '''
-Python for analysis of photon stream data from the Picoqunt GmbH Hydraharp and the Swabian TimeTagger.
+Python for analysis of photon stream data from the Picoqunt GmbH Hydraharp and t3 data from Boris's labview program for the Swabian TimeTagger.
 
 Adapted from photons.m V5.0 @ HENDRIK UTZAT, KATIE SHULENBERGER, BORIS SPOKOYNY, TIMOTHY SINCLAIR (10/29/2017)
 
 Weiwei Sun, July, 2019
+
+
+Update Sept. 2020, t2 data from swabian timetagger20 output files can be converted to .photons files and use functions in this class. (may need to rewrite main file though)
 '''
 
 import numpy as np
@@ -17,7 +20,7 @@ warnings.filterwarnings('ignore')
 '''
 For HH data, after reading the metadata with the constructor methods (.photons), the function get_photon_records() parses the raw hoton-arrival time data recorded with an absolute experimental clock (T2 data, .ht2) or a relative experimental clock (T3 data, .ht3) into the true photon-arrival time records. These photon-records are written to a .photons file in uint64 representation.
 
-For Swabian data (t3 mode), there's already a .photons file in int64 and a .ht3 file with header info.
+For Swabian data (t3 mode), there's already a .photons file in int64 and a .header file with header info.
 '''
 class photons:
 
@@ -27,7 +30,7 @@ class photons:
     memory_limit is the maximum memory to read metadata at once, set to default 1 MB.
 
     For HH data, skipheader is set to default as 0.
-    For Swabian data, file_path is the .header file, skipheader = 1.
+    For Swabian t3 data, file_path is the .header file, skipheader = 1.
     """
     def __init__(self, file_path, memory_limit = 1, skipheader = 0,):
 
@@ -39,6 +42,7 @@ class photons:
         self.buffer_size = int(self.memory_limit * 1024 * 1024 / 8) # how many uint64 can be read at once
         self.cross_corr = None
         self.auto_corr = None # dictionary to store the correlations
+        self.datatype = np.uint64
 
         # extract photon stream file info
         self.path_str = os.path.split(file_path)[0]
@@ -46,12 +50,11 @@ class photons:
         self.file_ext = os.path.split(file_path)[1].split('.')[1]
 
         # read the photon stream file header info
-        if not skipheader:
+        if skipheader == 0:
             self.get_photon_stream_header()
-            self.datatype = np.uint64
+
         else:
             self.get_swabian_header()
-            self.datatype = np.int64
 
         print('========================================')
         print('Photon class created')
@@ -312,6 +315,7 @@ class photons:
         header['SyncDivider'] = SyncDivider
         header['SyncRate'] = SyncRate
         header['nRecords'] = nRecords
+        header['Equip'] = 'HH'
 
 
 
@@ -341,13 +345,15 @@ class photons:
         print('Comment: %s\n'  % (header['Comment']))
         header['AcqTime'] = int(header['AcqTime'])
         print('Acquisition Time: %d s\n' % header['AcqTime'])
-        header['SyncRate'] = int(header['SyncRate'])
+        if header['SyncRate'] != 'None':
+             header['SyncRate'] = int(header['SyncRate'])
         print('Sync Rate: %d Hz\n' % header['SyncRate'])
-        header['nRecords'] = np.int64(header['nRecords'])
+        header['nRecords'] = np.uint64(header['nRecords'])
         print('Number of Records: %d\n' % header['nRecords'])
         header['MeasurementMode'] = int(header['MeasurementMode'])
         header['Resolution'] = int(header['Resolution']) # in ps
         print('Resolution: %d ps\n' % header['Resolution'])
+        header['Equip'] = 'TT'
         self.header = header
 
 
@@ -475,7 +481,7 @@ class photons:
         total_time = time_end - time_start
         print('========================================')
         print('Photon records written to %s.photons' % self.file_name,)
-        print('Time elapsed is %4f s' % total_time)
+        print('Time elapsed to get single photons record is %4f s' % total_time)
         print('========================================')
 
 
@@ -600,11 +606,10 @@ class photons:
     Two *args must be given, in the order of:
         file_in: filename of the .photons file without ending.
         bin_width: width of the bin for intensity compilation - ps for t2 data; number of pulses for t3 data.
-    If upper, lower_limit and file_out are given, in the order of file_in, file_out, bin_width, lower_limit, upper_limit, the photons emitted in bins with intensities in these bounds are written to a file_out.photons file. Important, the upper and lower limit refer to the total counts per bin (all detectors).
     '''
     def get_intensity_trace(self, file_in, bin_width):
 
-        time_start = timing.time()
+        # time_start = timing.time()
 
         fin_file = self.path_str +file_in + '.photons'
         fin = open(fin_file, 'rb')
@@ -629,8 +634,8 @@ class photons:
         self.intensity_counts['bin_width'] = bin_width
         self.intensity_counts['trace'] = photon_trace
 
-        time_end = timing.time()
-        print('Total time elapsed is %4f s' % (time_end - time_start))
+        # time_end = timing.time()
+        # print('Total time elapsed is %4f s' % (time_end - time_start))
 
 
 
@@ -676,7 +681,7 @@ class photons:
 
         fin.close()
 
-        if self.datatype == np.int64:
+        if self.header['Equip'] == 'TT':
             time = rep_time - time
 
         self.histo_lifetime['Time'] = time
@@ -819,7 +824,7 @@ class photons:
         tag_range = max(ch1_max, ch0_max) - min(ch1_min, ch0_min) # range of tags in the entire dataset
 
         corr_div = corr/division_factor
-        corr_norm = 2 * corr_div * tag_range / (tag_range - lags) * ch0_max / (ch0_count * ch1_count)
+        corr_norm = 2 * corr_div * tag_range**2 / (tag_range - lags)  / (ch0_count * ch1_count) # * ch0_max in boris' code. changed to tag_range
 
         print('Done\n')
         toc = timing.time()
@@ -904,104 +909,3 @@ class photons:
 
         time_end = timing.time()
         print('Total time elapsed is %4f s' % (time_end - time_start))
-
-
-
-
-    '''
-    ============================================================================================
-    Unfrequenly used functions
-    '''
-
-
-    '''
-    This function reads the header info (Comment, AcqTime, SyncRate, and nRecords) from Swabian ht3 file. Depreciated
-    '''
-    def get_ht3_header(self):
-        header = {}
-        with open(self.file_path,'rb') as f:
-            temp = f.read(72)
-            temp = f.read(256)
-            if temp[:4] == b'none':
-                header['Comment'] = 'none'
-            else:
-                header['Comment'] = temp
-            print('Comment: %s\n'  % (header['Comment']))
-            temp = f.read(36)
-            header['AcqTime'] = struct.unpack('i',f.read(4))[0]
-            print('Acquisition Time: %d s\n' % header['AcqTime'])
-            temp = f.read(488)
-            # temp = f.read(528)
-            header['SyncRate'] = struct.unpack('i',f.read(4))[0]
-            print('Sync Rate: %d Hz\n' % header['SyncRate'])
-            temp = f.read(12)
-            header['nRecords'] = struct.unpack('Q',f.read(8))[0]
-            print('Number of Records: %d\n' % header['nRecords'])
-            header['MeasurementMode'] = 3
-            header['Resolution'] = 34 # in ps
-            print('Resolution: %d ps\n' % header['Resolution'])
-        self.header = header
-
-
-
-    '''
-    This function removes afterpulsing from t3 data and writes to a new binary file, accomplished by removing any second photons detected after the same sync pulse for each detection channel.
-    '''
-    def rmv_after_pulse(self, file_in, file_out):
-
-        time_start = timing.time()
-        if self.header['MeasurementMode'] == 2:
-            print('Only for t3 data!')
-            return False
-        counts = self.buffer_size * 3
-        fin_file = self.path_str +file_in + '.photons'
-        fin = open(fin_file, 'rb')
-        fout_file = self.path_str + file_out + '.photons'
-        fout = open(fout_file, 'wb')
-
-
-        temp1 = np.array([-3,-2,-1]) # Assuming there are no more than three afterpulse photons
-        temp2 = [-1]*3
-        while 1:
-            batch = np.fromfile(fin, dtype=self.datatype, count = counts)
-            lbatch = len(batch)//3
-            batch.shape = lbatch, 3
-            channel_col = batch[:,0].copy()
-            n_sync_col = np.zeros((lbatch+3))
-            n_sync_col[3:] = batch[:,1].copy()
-            n_sync_col[:3] = temp1[:]
-            temp1 = batch[-3:, 1]
-
-
-            u, ind_n_sync = np.unique(n_sync_col, return_index=True) # record the indice of the first time a n_sync appears
-            ind_channel_same = np.zeros((lbatch, 3))
-            num_after_pulse = np.zeros(len(ind_n_sync))
-            num_after_pulse[1:] = np.diff(ind_n_sync) - 1 # when the two unique index has lager than one difference, which means there are photons between them. This is the number of afterpulse photons at each pulse.
-            ind_after_pulse_sync = np.full((lbatch+3,3),False)
-            ind_num_after_pulse = []
-            for i in range(1,4):
-                ind_num_after_pulse.append((num_after_pulse == i)[:]) # index in the ind_n_sync array where the sync pulse has i+1 afterpulse photons
-                for j in range(1,i+1):
-                    ind_after_pulse_sync[ind_n_sync[ind_num_after_pulse[i-1]]-j, i-1] = True
-
-            channel_move = [np.roll(channel_col,i) for i in range(1,4)] # shift the array by 1, 2, 3 to compare whether the channel number is the same as the one/two/three before
-            for i in range(1,4):
-                channel_move[i-1][:i] = temp2[-i:] # compare with the first one
-                ind_channel_same[:, i-1] = channel_col == channel_move[i-1] # index of the records which have the same channel number as the one/two/three before
-            temp2 = channel_col[-3:]
-
-            ind_rmv = np.zeros(lbatch)
-            for i in range(3):
-                ind_rmv += ind_channel_same[:, i] * ind_after_pulse_sync[3:,i] # index of the records which have both the same channel number and n_sync as the one/two/three before, these should be removed
-            ind_remain = ind_rmv == 0
-            batch[ind_remain, :].tofile(fout)
-             # record the last three to compare with the first one in next batch
-
-            if lbatch < self.buffer_size:
-                break
-
-        fin.close()
-        fout.close()
-        time_end = timing.time()
-        total_time = time_end - time_start
-        print('Total time elapsed is %4f s' % total_time)
