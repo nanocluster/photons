@@ -12,7 +12,7 @@ import os, struct, scipy, re, glob
 import photons as ph
 from matplotlib import pyplot as plt
 from scipy.optimize import curve_fit
-
+from scipy import interpolate
 
 class PCFS:
 
@@ -48,7 +48,7 @@ class PCFS:
             print('.pcfslog file not found!')
         self.file_pcfslog = file_pcfslog[0] # with extension
 
-        self.file_stream = [f.rstrip('.stream') for f in glob.glob('*.stream')] # without extension
+        self.file_stream = [f.replace('.stream', '') for f in glob.glob('*.stream')] # without extension
 
 
 
@@ -70,7 +70,7 @@ class PCFS:
             self.photons[f] = ph.photons(f+'.stream', self.memory_limit)
 
         toc= timing.time()
-        print('Total time elapsed is %4f s' % (toc - tic))
+        print('Total time elapsed to create PCFS class is %4f s' % (toc - tic))
 
 
     '''
@@ -83,7 +83,7 @@ class PCFS:
     This function gets all the photon files in the current directory.
     '''
     def get_file_photons(self):
-        self.file_photons = [f.rstrip('.photons') for f in glob.glob('*.photons')] # without extension
+        self.file_photons = [f.replace('.photons','') for f in glob.glob('*.photons')] # without extension
 
 
 
@@ -99,7 +99,7 @@ class PCFS:
                 print(f)
                 self.photons[f].get_photon_records(memory_limit = self.memory_limit)
         time_end= timing.time()
-        print('Total time elapsed is %4f s' % (time_end - time_start))
+        print('Total time elapsed to get all photons is %4f s' % (time_end - time_start))
 
 
 
@@ -114,7 +114,7 @@ class PCFS:
             if 'sum' not in f and ('sum_signal_' + f) not in self.file_photons :
                 self.photons[f].write_photons_to_one_channel(f, 'sum_signal_'+f)
         time_end= timing.time()
-        print('Total time elapsed is %4f s' % (time_end - time_start))
+        print('Total time elapsed to get sum signal of photons is %4f s' % (time_end - time_start))
 
 
 
@@ -303,14 +303,14 @@ class PCFS:
     This function gets mirrored spectral correlation by interpolation.
     '''
     def get_mirror_spectral_corr(self, white_fringe_pos, white_fringe_ind):
-
+        end = -1
         # construct mirrored data
-        interferogram = self.blinking_corrected_PCFS_interferogram[:,:]
+        interferogram = self.blinking_corrected_PCFS_interferogram[:,:end]
         mirror_intf = np.hstack((np.fliplr(interferogram[:, white_fringe_ind:]), interferogram[:, white_fringe_ind+1:]))
-        temp = white_fringe_pos - self.stage_positions[white_fringe_ind:]
+        temp = white_fringe_pos - self.stage_positions[white_fringe_ind:end]
         temp = temp[::-1]
-        mirror_stage_pos = np.hstack((temp, self.stage_positions[white_fringe_ind+1:] - white_fringe_pos))
-        interp_stage_pos = np.arange(min(mirror_stage_pos), max(mirror_stage_pos)+0.01, 0.01 )
+        mirror_stage_pos = np.hstack((temp, self.stage_positions[white_fringe_ind+1:end] - white_fringe_pos))
+        interp_stage_pos = np.arange(min(mirror_stage_pos), max(mirror_stage_pos)+0.1, 0.1 )
 
         # row-wise interpolation
         a,b = mirror_intf.shape
@@ -343,7 +343,84 @@ class PCFS:
         self.mirror_spectral_correlation['spectral_corr'] = spectral_correlation
         self.mirror_spectral_correlation['zeta'] = zeta_eV
 
+    '''
+    Using spline interpolation
+    '''
+    def get_splev_mirror_spec_corr(self, white_fringe_pos, white_fringe_ind,stage_increment=0.005):
 
+        # construct mirrored data
+        interferogram = self.blinking_corrected_PCFS_interferogram[:,:]
+        mirror_intf = np.hstack((np.fliplr(interferogram[:, white_fringe_ind:]), interferogram[:, white_fringe_ind+1:]))
+        temp = white_fringe_pos - self.stage_positions[white_fringe_ind:]
+        temp = temp[::-1]
+        mirror_stage_pos = np.hstack((temp, self.stage_positions[white_fringe_ind+1:] - white_fringe_pos))
+        interp_stage_pos = np.arange(min(mirror_stage_pos), max(mirror_stage_pos)+stage_increment, stage_increment )
+
+        # row-wise interpolation
+        a,b = mirror_intf.shape
+        interp_mirror = np.zeros((a,len(interp_stage_pos)))
+        for i in range(a):
+            x = mirror_stage_pos
+            y = mirror_intf[i,:]
+            tck = interpolate.splrep(x, y, s=0)
+            xnew = interp_stage_pos
+            ynew = interpolate.splev(xnew, tck, der=0)
+            interp_mirror[i,:] = ynew
+
+        self.mirror_stage_positions = mirror_stage_pos
+        self.mirror_PCFS_interferogram = interp_mirror # not including the first line of position
+
+        #some constants
+        eV2cm = 8065.54429
+        cm2eV = 1 / eV2cm
+
+        N = len(interp_stage_pos)
+        path_length_difference = 0.2 * (interp_stage_pos) # NOTE: This is where we convert to path length difference space in cm.
+        delta = (max(path_length_difference) - min(path_length_difference)) / (N-1)
+        zeta_eV = np.fft.fftshift(np.fft.fftfreq(N, delta)) * cm2eV * 1000 # in meV
+
+        # get reciprocal space (wavenumbers).
+        # increment = 1 / delta
+        # zeta_eV = np.linspace(-0.5 * increment, 0.5 * increment, num = N) * cm2eV * 1000 # converted to meV
+
+        # take the FFT of the interferogram to get the spectral correlation. All that shifting is to shift the zero frequency component to the middle of the FFT vector. We take the real part of the FFT because the interferogram is by definition entirely symmetric.
+        spectral_correlation = self.mirror_PCFS_interferogram.copy()
+        for i in range(a):
+            spectral_correlation[i,:] = np.abs(np.fft.fftshift(np.fft.fft(self.mirror_PCFS_interferogram[i,:])))
+
+        self.splev_spec_corr = {}
+        self.splev_spec_corr['spectral_corr'] = spectral_correlation
+        self.splev_spec_corr['zeta'] = zeta_eV
+
+    def plot_splev_spec_corr(self, tau_select, xlim):
+        x = self.splev_spec_corr['zeta']
+        ind = np.array([np.argmin(np.abs(self.tau - tau)) for tau in tau_select])
+        legends = [tau/1e9 for tau in tau_select]
+        y = self.splev_spec_corr['spectral_corr'][ind,:]
+
+        plt.figure()
+        plt.subplot(2,1,1)
+        for i in range(len(tau_select)):
+            plt.plot(x, y[i,:])
+
+        plt.ylabel(r'$p(\zeta)$')
+        plt.xlabel(r'$\zeta$ [meV]')
+        plt.xlim(xlim)
+        plt.legend(legends)
+        plt.title(self.PCFS_ID + r' Mirrored Spectral Correlation at $\tau$ [ms]')
+
+        plt.subplot(2,1,2)
+        for i in range(len(tau_select)):
+            plt.plot(x, y[i,:]/max(y[i,:]))
+
+        plt.ylabel(r'Normalized $p(\zeta)$')
+        plt.xlabel(r'$\zeta$ [meV]')
+        plt.xlim(xlim)
+        plt.legend(legends)
+
+        plt.title(self.PCFS_ID + r' Mirrored Spectral Correlation at $\tau$ [ms]')
+        plt.tight_layout()
+        plt.show()
 
     '''
     This function calculates and plots the spectral correlation of an interterferogram parsed as two vectors containing the stage_positions (not path length differences!), the corresponding interferogram values and the white-fringe position.
